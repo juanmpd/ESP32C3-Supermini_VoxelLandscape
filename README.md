@@ -2,9 +2,7 @@
 
 This is a voxel-space renderer running on an ESP32-C3 Supermini with an ST7789V display.
 
-<video width="320" height="240" controls>
-  <source src="./demo.mp4" type="video/mp4">
-</video>
+[![Demo del fractal](./voxel_landscape.jpg)](voxel_landscape.mp4)
 
 I'm using a pin assignment that allows me to plug-and-play the display directly over the microcontroller on a protoboard without any cables at all, or to solder it directly on its belly without any wiring (except for the BackLight control if supported by the TFT display, as in this case).
 
