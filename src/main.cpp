@@ -38,27 +38,25 @@ static const uint16_t infoPaleta [] = {
 #define ANCHO_TFT 320
 #define ALTO_TFT 240
 #define ANCHO_VENTANA 312
-#define ALTO_VENTANA 234
+#define ALTO_VENTANA 236
 
 // PALETA DE COLORES
-const int NUMERO_COLORES = sizeof(infoPaleta) / sizeof(infoPaleta[0]);
+const uint8_t NUMERO_COLORES = sizeof(infoPaleta) / sizeof(infoPaleta[0]);
 
 // MAPA DEL TERRENO
-const int ANCHO_TERRENO_LOG2 = 8;
-const int ALTO_TERRENO_LOG2 = 8;
-const int ANCHO_TERRENO = (1<<ANCHO_TERRENO_LOG2);
-const int ALTO_TERRENO =  (1<<ALTO_TERRENO_LOG2);
+#define ANCHO_TERRENO 256
+#define ALTO_TERRENO 256
 uint8_t *terreno[ALTO_TERRENO]; // [ANCHO_TERRENO * ALTO_TERRENO]
 
 // Buffer donde dibujamos
 uint8_t *pixels = NULL; // [ANCHO_VENTANA * ALTO_VENTANA];
 
-int rgbBufferSize = ANCHO_VENTANA * ALTO_VENTANA * sizeof(uint16_t);
-int pixelBufferSize = ANCHO_VENTANA * ALTO_VENTANA * sizeof(uint8_t);
-int terrainWidthBufferSize = ANCHO_TERRENO * sizeof(uint8_t);
+#define rgbBufferSize (ANCHO_VENTANA * ALTO_VENTANA * sizeof(uint16_t))
+#define pixelBufferSize (ANCHO_VENTANA * ALTO_VENTANA * sizeof(uint8_t))
+#define terrainWidthBufferSize (ANCHO_TERRENO * sizeof(uint8_t))
 
 // Para ayudar en el dibujado, mientras vamos mirando de lejos a cerca
-int lineaScan[ANCHO_VENTANA]; 
+uint8_t lineaScan[ANCHO_VENTANA]; 
 
 // DISPLAY
 static uint16_t *rgbBuffer = NULL; // [ANCHO_VENTANA * ALTO_VENTANA];
@@ -70,7 +68,7 @@ const int ALTURA_OBSERVADOR = 100;
 
 const double DOS_PI = 2.0*PI;
 const double PASO_GIRO = DOS_PI / 36.0;  // Incremento de angulo al girar por teclado
-const int PASO_AVANCE = 4;               // Incremento de coordenada al avanzar/retroceder
+const uint8_t PASO_AVANCE = 4;               // Incremento de coordenada al avanzar/retroceder
 
 
 void initTerrenoConPlasma();
@@ -91,11 +89,11 @@ void initLandVoxel() {
 //
 // PLASMA
 //
-const int VALOR_MAX_PLASMA = NUMERO_COLORES-1;
-const int VALOR_FIJADO_PLASMA = 5;
-const int VALOR_MIN_PLASMA = 5; // DEBE SER DISTINTO DE 0
+const uint8_t VALOR_MAX_PLASMA = NUMERO_COLORES-1;
+const uint8_t VALOR_FIJADO_PLASMA = 5;
+const uint8_t VALOR_MIN_PLASMA = 5; // DEBE SER DISTINTO DE 0
 void initTerrenoConPlasma(){
-    for (int y=0; y <ALTO_TERRENO; y++) {
+    for (uint16_t y=0; y <ALTO_TERRENO; y++) {
         memset(terreno[y], 0, terrainWidthBufferSize);
     }
     terreno[0][0]=(uint8_t)(VALOR_FIJADO_PLASMA);
@@ -133,10 +131,12 @@ void aplicarPlasmaEnTerreno(int x1, int y1, int x2, int y2) {
     aplicarPlasmaEnTerreno(x1,yn,xn,y2); aplicarPlasmaEnTerreno(xn,yn,x2,y2);
 }
 
+#define OPTIMIZ_ANG_LOG2 8
+#define OPTIMIZ_ANG (1 << OPTIMIZ_ANG_LOG2)
 void dibujaEnBuffer() {
 
     // Constantes varias
-    const int PROFUN_SCAN = 55;
+    const uint8_t PROFUN_SCAN = 55;
     const int ANCHO_VENTANA_AMPLIADO = (int)std::round(ANCHO_VENTANA * 1.125);
     const int ANCHO_PANTALLA_REDUCIDO = (int)std::round(ANCHO_VENTANA * 0.9375);
 
@@ -146,8 +146,6 @@ void dibujaEnBuffer() {
     uint8_t mpc;
 
     // Cosenos y senos correspondientes a DIRECCION
-    const int OPTIMIZ_ANG_LOG2 = 8;
-    const int OPTIMIZ_ANG = 1 << OPTIMIZ_ANG_LOG2;
     csf = (int)std::round(OPTIMIZ_ANG*std::cos(direccion));
     snf = (int)std::round(OPTIMIZ_ANG*std::sin(direccion));
     
@@ -188,7 +186,7 @@ void dibujaEnBuffer() {
 }
 
 void moverse() {
-    int pasos = 5;
+    static const int pasos = 5;
     y = y + (int)std::round((pasos * std::cos(direccion)));
     if (y>=ALTO_TERRENO) y-=ALTO_TERRENO;
     else if (y<0) y+=ALTO_TERRENO;
@@ -201,7 +199,7 @@ void vuelcaBufferIndexadoADisplayRGB() {
     // Pasar de indexado a rgb
     uint16_t *pRGBBuffer = rgbBuffer;
     uint8_t *pPixels = pixels;
-    for (int i=ANCHO_VENTANA*ALTO_VENTANA; i>0; i--) {
+    for (uint32_t i=ANCHO_VENTANA*ALTO_VENTANA; i>0; i--) {
         *pRGBBuffer++ = infoPaleta[*pPixels++];
     }
     // Vuelca el buffer RGB al display
@@ -237,17 +235,17 @@ void setup() {
   }
   memset(rgbBuffer, 0, rgbBufferSize);
   memset(pixels, 0, pixelBufferSize);
-	for (int ty=0; ty<ALTO_TERRENO; ty++) {
+  for (uint16_t ty=0; ty<ALTO_TERRENO; ty++) {
     uint8_t* _d = terreno[ty] = (uint8_t*) malloc(terrainWidthBufferSize); 
     if (!_d) {
-      int y = 0;
-      tft.drawString("Could not allocate memory", 0, (y++)*16, 2);  // Draw text using font 2
-      tft.drawString(String("Free heap: ") + ESP.getFreeHeap(), 0, (y++)*16, 2);
-      tft.drawString(String("Largest block: ") + heap_caps_get_largest_free_block(MALLOC_CAP_8BIT), 0, (y++)*16, 2);
-      tft.drawString(String("Filas que faltan: ") + (ALTO_TERRENO-ty), 0, (y++)*16, 2);
-      return;
+        int y = 0;
+        tft.drawString("Could not allocate memory", 0, (y++)*16, 2);  // Draw text using font 2
+        tft.drawString(String("Free heap: ") + ESP.getFreeHeap(), 0, (y++)*16, 2);
+        tft.drawString(String("Largest block: ") + heap_caps_get_largest_free_block(MALLOC_CAP_8BIT), 0, (y++)*16, 2);
+        tft.drawString(String("Filas que faltan: ") + (ALTO_TERRENO-ty), 0, (y++)*16, 2);
+        return;
     }
-	} 
+  } 
   // Inicializacion (preparar terreno)
   initLandVoxel();
   inicializacionOk = true;
