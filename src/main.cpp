@@ -61,14 +61,15 @@ uint8_t lineaScan[ANCHO_VENTANA];
 // DISPLAY
 static uint16_t *rgbBuffer = NULL; // [ANCHO_VENTANA * ALTO_VENTANA];
 
+const double DOS_PI = 2.0*PI;
+const double PASO_GIRO = DOS_PI / 36.0;  // Incremento de angulo al girar por teclado
+const uint8_t PASO_AVANCE = 4;           // Incremento de coordenada al avanzar/retroceder
+
 // Posicion y direccion
 int x, y;
 double direccion;
 const int ALTURA_OBSERVADOR = 100;
 
-const double DOS_PI = 2.0*PI;
-const double PASO_GIRO = DOS_PI / 36.0;  // Incremento de angulo al girar por teclado
-const uint8_t PASO_AVANCE = 4;               // Incremento de coordenada al avanzar/retroceder
 
 
 void initTerrenoConPlasma();
@@ -83,7 +84,7 @@ void initLandVoxel() {
     initTerrenoConPlasma();
     // Parametros iniciales para el movimiento
     x = y = 0;
-    direccion = 0.0;
+    direccion = 0;
 }
 
 //
@@ -186,13 +187,15 @@ void dibujaEnBuffer() {
 }
 
 void moverse() {
-    static const int pasos = 5;
+    static const int pasos = PASO_AVANCE;
     y = y + (int)std::round((pasos * std::cos(direccion)));
     if (y>=ALTO_TERRENO) y-=ALTO_TERRENO;
     else if (y<0) y+=ALTO_TERRENO;
     x = x + (int)std::round((pasos * std::sin(direccion)));
     if (x>=ANCHO_TERRENO) x-=ANCHO_TERRENO;
     else if (x<0) x+=ANCHO_TERRENO;
+    direccion = direccion + (DOS_PI / 360);
+    if (direccion > DOS_PI) direccion -= DOS_PI;
 }
 
 void vuelcaBufferIndexadoADisplayRGB() {
@@ -213,7 +216,7 @@ void setup() {
   // TFT initialization
   tft.begin();
   tft.setSwapBytes(true);
-  tft.setRotation(1);
+  tft.setRotation(3);
   tft.fillScreen(TFT_BLACK);
   ledcAttach(TFT_BL, 5000, 8);  // Frecuencia 5 kHz, resolución 8 bits (0–255)
   ledcWrite(TFT_BL, 255);        // 0-255 Brightness value for the display
