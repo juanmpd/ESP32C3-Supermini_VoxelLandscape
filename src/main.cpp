@@ -30,11 +30,9 @@ static const uint16_t infoPaleta [] = {
   58628,58595,58563,56482,56418,56354,56289,33808,65535,65535,65535,65535,50712,65535,65535
 };
 
-// FIXME: poner infoPaleta sin ColorMap, a ver si ahorra algo
-// O dividir pantalla en N lineas por separado
-
 // DIMENSIONES DE LA VENTANA. No podemos aprovechar el TFT al 100% porque el ESP32C3 tiene una
 // RAM limitada y necesitamos más de la que nos da
+// FIXME SEGURAMENTE LUEGO PODREMOS
 #define ANCHO_TFT 320
 #define ALTO_TFT 240
 #define ANCHO_VENTANA 312
@@ -44,9 +42,9 @@ static const uint16_t infoPaleta [] = {
 const uint8_t NUMERO_COLORES = sizeof(infoPaleta) / sizeof(infoPaleta[0]);
 
 // MAPA DEL TERRENO
-#define ANCHO_TERRENO 256
-#define ALTO_TERRENO 256
-uint8_t *terreno[ALTO_TERRENO]; // [ANCHO_TERRENO * ALTO_TERRENO]
+#define ANCHO_TERRENO 1024
+#define ALTO_TERRENO 1024
+extern const uint8_t terreno[] __attribute__((aligned(4)));
 
 // Buffer donde dibujamos
 uint8_t *pixels = NULL; // [ANCHO_VENTANA * ALTO_VENTANA];
@@ -70,8 +68,6 @@ int x, y;
 double direccion;
 const int ALTURA_OBSERVADOR = 100;
 
-
-
 void initTerrenoConPlasma();
 uint8_t ncol(int mc, int n, int dvd);
 void aplicarPlasmaEnTerreno(int x1, int y1, int x2, int y2);
@@ -94,11 +90,13 @@ const uint8_t VALOR_MAX_PLASMA = NUMERO_COLORES-1;
 const uint8_t VALOR_FIJADO_PLASMA = 5;
 const uint8_t VALOR_MIN_PLASMA = 5; // DEBE SER DISTINTO DE 0
 void initTerrenoConPlasma(){
+/*
     for (uint16_t y=0; y <ALTO_TERRENO; y++) {
         memset(terreno[y], 0, terrainWidthBufferSize);
     }
     terreno[0][0]=(uint8_t)(VALOR_FIJADO_PLASMA);
     aplicarPlasmaEnTerreno(0,0,ANCHO_TERRENO,ALTO_TERRENO);
+*/
 }
 uint8_t ncol(int mc, int n, int dvd) {
     int loc;
@@ -109,6 +107,7 @@ uint8_t ncol(int mc, int n, int dvd) {
     return (uint8_t)loc;
 }
 void aplicarPlasmaEnTerreno(int x1, int y1, int x2, int y2) {
+/*
     // NOTA: para dar impresion de continuidad, jugamos con X2/Y2, de
     // forma que x2=ANCHO_TERRENO equivale a 0, y y2=ALTO_TERRENO equivale
     // a 0 (además, solo se puede indexar de 0 a ANCHOoALTO-1)
@@ -130,6 +129,7 @@ void aplicarPlasmaEnTerreno(int x1, int y1, int x2, int y2) {
     terreno[yn][xn]=ncol(p1+p2+p3+p4,dxy,4);
     aplicarPlasmaEnTerreno(x1,y1,xn,yn); aplicarPlasmaEnTerreno(xn,y1,x2,yn);
     aplicarPlasmaEnTerreno(x1,yn,xn,y2); aplicarPlasmaEnTerreno(xn,yn,x2,y2);
+*/
 }
 
 #define OPTIMIZ_ANG_LOG2 8
@@ -142,8 +142,8 @@ void dibujaEnBuffer() {
     const int ANCHO_PANTALLA_REDUCIDO = (int)std::round(ANCHO_VENTANA * 0.9375);
 
     // Variables que usaremos
-    int z, zobs, iy1, iyterreno, ixterreno, xpant, ypant, s, csf, snf, i, j, aux, aux2;
-    int xterreno = x, yterreno = y;
+    int32_t z, zobs, iy1, iyterreno, ixterreno, xpant, ypant, s, csf, snf, i, j, aux, aux2;
+    int32_t xterreno = x, yterreno = y;
     uint8_t mpc;
 
     // Cosenos y senos correspondientes a DIRECCION
@@ -155,7 +155,7 @@ void dibujaEnBuffer() {
     for (aux=ANCHO_VENTANA*ALTO_VENTANA-1; aux>=0; aux--) pixels[aux]=(uint8_t)0;
 
     // Calculos
-    zobs = ALTURA_OBSERVADOR + terreno[yterreno][xterreno];
+    zobs = ALTURA_OBSERVADOR + terreno[yterreno*ANCHO_TERRENO+xterreno];
     for (aux=0; aux<=PROFUN_SCAN; aux++){
         iy1=1+2*(aux); s=4 + ANCHO_PANTALLA_REDUCIDO/iy1;
         for (aux2=-aux; aux2<=aux; aux2++){
@@ -167,9 +167,10 @@ void dibujaEnBuffer() {
             else if (iyterreno>=ALTO_TERRENO) iyterreno-=ALTO_TERRENO;
             xpant=(ANCHO_VENTANA>>1)+ ANCHO_VENTANA_AMPLIADO*aux2/iy1;
             if ((xpant>=0) & (xpant+s<ANCHO_VENTANA)) {
-                mpc=terreno[iyterreno][ixterreno];
+                mpc=terreno[iyterreno*ANCHO_TERRENO+ixterreno];
                 z=mpc;
-                if (z<47) z=46;
+                // Next line was to allow for same sea level with different degrees of blue. Now we do not want this
+                // if (z<47) z=46;
                 ypant=(ALTO_VENTANA>>1)+(zobs-z)*30 / iy1;
                 if ((ypant<ALTO_VENTANA) & (ypant>=0)) {
                     for (j=xpant; j<=xpant+s; j++) {
@@ -238,6 +239,7 @@ void setup() {
   }
   memset(rgbBuffer, 0, rgbBufferSize);
   memset(pixels, 0, pixelBufferSize);
+  /*
   for (uint16_t ty=0; ty<ALTO_TERRENO; ty++) {
     uint8_t* _d = terreno[ty] = (uint8_t*) malloc(terrainWidthBufferSize); 
     if (!_d) {
@@ -249,6 +251,7 @@ void setup() {
         return;
     }
   } 
+  */
   // Inicializacion (preparar terreno)
   initLandVoxel();
   inicializacionOk = true;
