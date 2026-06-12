@@ -20,6 +20,12 @@ LGFX tft;
 #include <cstdlib>
 #include <cstring>
 
+
+void printMemStatistics() {
+  Serial.printf("Free Heap          : %lu bytes\n", (unsigned long)ESP.getFreeHeap());
+  Serial.printf("Max Contiguous Heap: %lu bytes\n", (unsigned long)ESP.getMaxAllocHeap());
+}
+
 // RGB565
 static const uint16_t infoPaleta [] = {
   0,50712,21,117,2230,2294,2358,4471,4535,6648,6712,8825,8889,10970,11034,13147,13211,15324,15388,17501,17501,17565,19678,19742,21855,
@@ -64,8 +70,8 @@ const double PASO_GIRO = DOS_PI / 36.0;  // Incremento de angulo al girar por te
 const uint8_t PASO_AVANCE = 4;           // Incremento de coordenada al avanzar/retroceder
 
 // Posicion y direccion
-int x, y;
-double direccion;
+int x=0, y=0;
+double direccion = 0.0;
 const int ALTURA_OBSERVADOR = 100;
 
 void initTerrenoConPlasma();
@@ -81,6 +87,9 @@ void initLandVoxel() {
     // Parametros iniciales para el movimiento
     x = y = 0;
     direccion = 0;
+    Serial.printf("Intentando setear direccion a: %f", 0.0); delay(1000);
+    direccion=0.0;
+    Serial.printf("Seteada direccion a: %f", 0.0); delay(1000);
 }
 
 //
@@ -134,31 +143,50 @@ void aplicarPlasmaEnTerreno(int x1, int y1, int x2, int y2) {
 
 #define OPTIMIZ_ANG_LOG2 8
 #define OPTIMIZ_ANG (1 << OPTIMIZ_ANG_LOG2)
-void dibujaEnBuffer() {
 
+int kk=0;
+void dibujaEnBuffer() {
+    Serial.printf("Entramos en dibujaEnBuffer\n"); delay(125);
+    printMemStatistics();
+    Serial.printf("kk = %d\n", ++kk); delay(1025);
     // Constantes varias
     const uint8_t PROFUN_SCAN = 55;
     const int ANCHO_VENTANA_AMPLIADO = (int)std::round(ANCHO_VENTANA * 1.125);
     const int ANCHO_PANTALLA_REDUCIDO = (int)std::round(ANCHO_VENTANA * 0.9375);
+    Serial.printf("kk = %d\n", ++kk); delay(1025);
 
     // Variables que usaremos
     int32_t z, zobs, iy1, iyterreno, ixterreno, xpant, ypant, s, csf, snf, i, j, aux, aux2;
     int32_t xterreno = x, yterreno = y;
     uint8_t mpc;
+    Serial.printf("kk = %d\n", ++kk); delay(1025);
 
     // Cosenos y senos correspondientes a DIRECCION
-    csf = (int)std::round(OPTIMIZ_ANG*std::cos(direccion));
-    snf = (int)std::round(OPTIMIZ_ANG*std::sin(direccion));
+    Serial.printf("Intentando setear direccion a: %f", 0.0); delay(1000);
+    direccion=0.0;
+    Serial.printf("Direccion falsa: %f", 3.4); delay(1000);
+
+    Serial.printf("Direccion: %f", direccion); delay(1000);
+    Serial.printf("Optimiz_ang: %d", OPTIMIZ_ANG); delay(1000);
+    Serial.printf("cos(Direccion): %f", std::cos(direccion)); delay(1000);
+    Serial.printf("OPTIMIZ_ANG*std::cos(direccion)", OPTIMIZ_ANG*std::cos(direccion)); delay(1000);
+    csf = (int32_t)std::round(OPTIMIZ_ANG*std::cos(direccion));
+    Serial.printf("kk = %d\n", ++kk); delay(1025);
+    snf = (int32_t)std::round(OPTIMIZ_ANG*std::sin(direccion));
+    Serial.printf("kk = %d\n", ++kk); delay(1025);
     
-    // Reset de la linea de scan, y del buffer de pantalla
+    // Reset de la linea de scan, y del buffer de 
+    Serial.print("Vamos a resetear lineas scan\n"); delay(1000);
     for (aux=ANCHO_VENTANA-1; aux>=0; aux--) lineaScan[aux]=ALTO_VENTANA-1;
     for (aux=ANCHO_VENTANA*ALTO_VENTANA-1; aux>=0; aux--) pixels[aux]=(uint8_t)0;
-
+    Serial.printf("Reset lineas scan ok\n"); delay(125);
     // Calculos
     zobs = ALTURA_OBSERVADOR + terreno[yterreno*ANCHO_TERRENO+xterreno];
     for (aux=0; aux<=PROFUN_SCAN; aux++){
+        Serial.printf("Aux=%d\n",aux);
         iy1=1+2*(aux); s=4 + ANCHO_PANTALLA_REDUCIDO/iy1;
         for (aux2=-aux; aux2<=aux; aux2++){
+            Serial.printf(".");
             ixterreno=xterreno + ((aux2*csf+aux*snf) >> OPTIMIZ_ANG_LOG2);
             iyterreno=yterreno + ((aux*csf-aux2*snf) >> OPTIMIZ_ANG_LOG2);
             if (ixterreno<0) ixterreno+=ANCHO_TERRENO;
@@ -184,6 +212,7 @@ void dibujaEnBuffer() {
                 }
             }
         }
+        Serial.printf("\n");
     }
 }
 
@@ -213,6 +242,19 @@ void vuelcaBufferIndexadoADisplayRGB() {
 bool inicializacionOk = false;
 void setup() {
   Serial.begin(115200);
+  // Messages to Serial are lost for the first seconds after startup, and I want them all, so let's wait.
+  delay(5000);
+  Serial.printf("Setup just started...\n");
+  printMemStatistics();
+
+  uint32_t k=0;
+  for (x=0; x<1024;x++) {
+    // Serial.printf("Recorriendo x=%d\n",x);
+    for (y=0; y<1024;y++) {
+        k += terreno[y*ANCHO_TERRENO+x];
+    }
+  }
+  Serial.printf("Verificado terreno accessible 100%%\n");
 
   // TFT initialization
   tft.begin();
@@ -224,7 +266,9 @@ void setup() {
 
   // Memory allocation. First bigger block, to try to minimize the risk of 
   // not succeeding due to memory fragmentation preventing it.
+  Serial.printf("Going to allocate memory (1/2)...\n");
   rgbBuffer = (uint16_t*) malloc(rgbBufferSize);
+  Serial.printf("Going to allocate memory (2/2)...\n");
   pixels = (uint8_t*) malloc(pixelBufferSize); 
   if (!rgbBuffer || !pixels) {
     // Memory could not be allocated. Maybe it is fragmented
@@ -237,8 +281,11 @@ void setup() {
     tft.drawString(String("pixels=0x") + String((uint32_t)pixels, HEX), 0, (y++)*16, 2);
     return;
   }
+  Serial.printf("Memory allocated successfully\n");
   memset(rgbBuffer, 0, rgbBufferSize);
+  Serial.printf("Memory zeroed (1/2)\n");
   memset(pixels, 0, pixelBufferSize);
+  Serial.printf("Memory zeroed (2/2)\n");
   /*
   for (uint16_t ty=0; ty<ALTO_TERRENO; ty++) {
     uint8_t* _d = terreno[ty] = (uint8_t*) malloc(terrainWidthBufferSize); 
@@ -255,6 +302,8 @@ void setup() {
   // Inicializacion (preparar terreno)
   initLandVoxel();
   inicializacionOk = true;
+  Serial.printf("Setup just completed...\n");
+  printMemStatistics();
 }
 
 void loop() {
@@ -263,10 +312,16 @@ void loop() {
     delay(100000);  // We'll actually be stuck in the loop here, so this delay is only not to have the CPU working too much...
     return;
   }
-  // Dibujar en buffer indexado
+  // Serial.printf("Nada... esperamos 1s...");  delay(1000);  return;
+  // Dibujar en buffer 
+  Serial.printf("Going to draw into buffer\n"); delay(125);
   dibujaEnBuffer();
+  Serial.printf("Buffer drawn\n"); delay(1000);
+  Serial.printf("Dumping to display...\n");
   // Volcar buffer indexado a display rgb
   vuelcaBufferIndexadoADisplayRGB();
+  Serial.printf("Dumping to display finished. Going to move forward...\n");  delay(1000);
   // Moverse
   moverse();
+  Serial.printf("Moved forward.\n");  delay(1000);
 }
