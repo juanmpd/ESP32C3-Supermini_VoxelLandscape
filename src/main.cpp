@@ -87,9 +87,7 @@ void initLandVoxel() {
     // Parametros iniciales para el movimiento
     x = y = 0;
     direccion = 0;
-    Serial.printf("Intentando setear direccion a: %f", 0.0); delay(1000);
     direccion=0.0;
-    Serial.printf("Seteada direccion a: %f", 0.0); delay(1000);
 }
 
 //
@@ -146,47 +144,26 @@ void aplicarPlasmaEnTerreno(int x1, int y1, int x2, int y2) {
 
 int kk=0;
 void dibujaEnBuffer() {
-    Serial.printf("Entramos en dibujaEnBuffer\n"); delay(125);
-    printMemStatistics();
-    Serial.printf("kk = %d\n", ++kk); delay(1025);
     // Constantes varias
     const uint8_t PROFUN_SCAN = 55;
     const int ANCHO_VENTANA_AMPLIADO = (int)std::round(ANCHO_VENTANA * 1.125);
     const int ANCHO_PANTALLA_REDUCIDO = (int)std::round(ANCHO_VENTANA * 0.9375);
-    Serial.printf("kk = %d\n", ++kk); delay(1025);
 
     // Variables que usaremos
     int32_t z, zobs, iy1, iyterreno, ixterreno, xpant, ypant, s, csf, snf, i, j, aux, aux2;
     int32_t xterreno = x, yterreno = y;
     uint8_t mpc;
-    Serial.printf("kk = %d\n", ++kk); delay(1025);
-
     // Cosenos y senos correspondientes a DIRECCION
-    Serial.printf("Intentando setear direccion a: %f", 0.0); delay(1000);
-    direccion=0.0;
-    Serial.printf("Direccion falsa: %f", 3.4); delay(1000);
-
-    Serial.printf("Direccion: %f", direccion); delay(1000);
-    Serial.printf("Optimiz_ang: %d", OPTIMIZ_ANG); delay(1000);
-    Serial.printf("cos(Direccion): %f", std::cos(direccion)); delay(1000);
-    Serial.printf("OPTIMIZ_ANG*std::cos(direccion)", OPTIMIZ_ANG*std::cos(direccion)); delay(1000);
     csf = (int32_t)std::round(OPTIMIZ_ANG*std::cos(direccion));
-    Serial.printf("kk = %d\n", ++kk); delay(1025);
-    snf = (int32_t)std::round(OPTIMIZ_ANG*std::sin(direccion));
-    Serial.printf("kk = %d\n", ++kk); delay(1025);
-    
+    snf = (int32_t)std::round(OPTIMIZ_ANG*std::sin(direccion));    
     // Reset de la linea de scan, y del buffer de 
-    Serial.print("Vamos a resetear lineas scan\n"); delay(1000);
     for (aux=ANCHO_VENTANA-1; aux>=0; aux--) lineaScan[aux]=ALTO_VENTANA-1;
     for (aux=ANCHO_VENTANA*ALTO_VENTANA-1; aux>=0; aux--) pixels[aux]=(uint8_t)0;
-    Serial.printf("Reset lineas scan ok\n"); delay(125);
     // Calculos
     zobs = ALTURA_OBSERVADOR + terreno[yterreno*ANCHO_TERRENO+xterreno];
     for (aux=0; aux<=PROFUN_SCAN; aux++){
-        Serial.printf("Aux=%d\n",aux);
         iy1=1+2*(aux); s=4 + ANCHO_PANTALLA_REDUCIDO/iy1;
         for (aux2=-aux; aux2<=aux; aux2++){
-            Serial.printf(".");
             ixterreno=xterreno + ((aux2*csf+aux*snf) >> OPTIMIZ_ANG_LOG2);
             iyterreno=yterreno + ((aux*csf-aux2*snf) >> OPTIMIZ_ANG_LOG2);
             if (ixterreno<0) ixterreno+=ANCHO_TERRENO;
@@ -212,7 +189,6 @@ void dibujaEnBuffer() {
                 }
             }
         }
-        Serial.printf("\n");
     }
 }
 
@@ -246,15 +222,6 @@ void setup() {
   delay(5000);
   Serial.printf("Setup just started...\n");
   printMemStatistics();
-
-  uint32_t k=0;
-  for (x=0; x<1024;x++) {
-    // Serial.printf("Recorriendo x=%d\n",x);
-    for (y=0; y<1024;y++) {
-        k += terreno[y*ANCHO_TERRENO+x];
-    }
-  }
-  Serial.printf("Verificado terreno accessible 100%%\n");
 
   // TFT initialization
   tft.begin();
@@ -312,16 +279,10 @@ void loop() {
     delay(100000);  // We'll actually be stuck in the loop here, so this delay is only not to have the CPU working too much...
     return;
   }
-  // Serial.printf("Nada... esperamos 1s...");  delay(1000);  return;
   // Dibujar en buffer 
-  Serial.printf("Going to draw into buffer\n"); delay(125);
   dibujaEnBuffer();
-  Serial.printf("Buffer drawn\n"); delay(1000);
-  Serial.printf("Dumping to display...\n");
   // Volcar buffer indexado a display rgb
   vuelcaBufferIndexadoADisplayRGB();
-  Serial.printf("Dumping to display finished. Going to move forward...\n");  delay(1000);
   // Moverse
   moverse();
-  Serial.printf("Moved forward.\n");  delay(1000);
 }
