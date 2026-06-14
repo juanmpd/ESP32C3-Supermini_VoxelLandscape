@@ -74,75 +74,10 @@ int x=0, y=0;
 double direccion = 0.0;
 const int ALTURA_OBSERVADOR = 100;
 
-void initTerrenoConPlasma();
-uint8_t ncol(int mc, int n, int dvd);
-void aplicarPlasmaEnTerreno(int x1, int y1, int x2, int y2);
-
-//
-// Inicialización
-//
-void initLandVoxel() {
-    // Inicializar un mapa del terreno
-    initTerrenoConPlasma();
-    // Parametros iniciales para el movimiento
-    x = y = 0;
-    direccion = 0;
-    direccion=0.0;
-}
-
-//
-// PLASMA
-//
-const uint8_t VALOR_MAX_PLASMA = NUMERO_COLORES-1;
-const uint8_t VALOR_FIJADO_PLASMA = 5;
-const uint8_t VALOR_MIN_PLASMA = 5; // DEBE SER DISTINTO DE 0
-void initTerrenoConPlasma(){
-/*
-    for (uint16_t y=0; y <ALTO_TERRENO; y++) {
-        memset(terreno[y], 0, terrainWidthBufferSize);
-    }
-    terreno[0][0]=(uint8_t)(VALOR_FIJADO_PLASMA);
-    aplicarPlasmaEnTerreno(0,0,ANCHO_TERRENO,ALTO_TERRENO);
-*/
-}
-uint8_t ncol(int mc, int n, int dvd) {
-    int loc;
-    double random = rand() / (double)RAND_MAX;
-    loc = (mc+n-(int)(2*n*random)) / dvd;
-    if (loc>VALOR_MAX_PLASMA) loc=VALOR_MAX_PLASMA;
-    else if (loc<VALOR_MIN_PLASMA) loc=VALOR_MIN_PLASMA;
-    return (uint8_t)loc;
-}
-void aplicarPlasmaEnTerreno(int x1, int y1, int x2, int y2) {
-/*
-    // NOTA: para dar impresion de continuidad, jugamos con X2/Y2, de
-    // forma que x2=ANCHO_TERRENO equivale a 0, y y2=ALTO_TERRENO equivale
-    // a 0 (además, solo se puede indexar de 0 a ANCHOoALTO-1)
-
-    // Para dar impresion de continuidad:
-    int x2b = x2, y2b = y2;
-    if (x2b==ANCHO_TERRENO) x2b = 0;
-    if (y2b==ALTO_TERRENO) y2b = 0;
-    // Proceso en sí:
-    int xn, yn, dxy, p1, p2, p3, p4;
-    if ((x2-x1<2) & (y2-y1<2)) return;
-    p1=terreno[y1][x1]; p2=terreno[y2b][x1];
-    p3=terreno[y1][x2b]; p4=terreno[y2b][x2b];
-    xn=(x2+x1)>>1; yn=(y2+y1)>>1; dxy=5*(x2-x1+y2-y1)/3;
-    if (terreno[y1][xn]==(uint8_t)0) terreno[y1][xn]=ncol(p1+p3,dxy,2);
-    if (terreno[yn][x1]==(uint8_t)0) terreno[yn][x1]=ncol(p1+p2,dxy,2);
-    if (terreno[yn][x2b]==(uint8_t)0) terreno[yn][x2b]=ncol(p3+p4,dxy,2);
-    if (terreno[y2b][xn]==(uint8_t)0) terreno[y2b][xn]=ncol(p2+p4,dxy,2);
-    terreno[yn][xn]=ncol(p1+p2+p3+p4,dxy,4);
-    aplicarPlasmaEnTerreno(x1,y1,xn,yn); aplicarPlasmaEnTerreno(xn,y1,x2,yn);
-    aplicarPlasmaEnTerreno(x1,yn,xn,y2); aplicarPlasmaEnTerreno(xn,yn,x2,y2);
-*/
-}
 
 #define OPTIMIZ_ANG_LOG2 8
 #define OPTIMIZ_ANG (1 << OPTIMIZ_ANG_LOG2)
 
-int kk=0;
 void dibujaEnBuffer() {
     // Constantes varias
     const uint8_t PROFUN_SCAN = 55;
@@ -253,21 +188,6 @@ void setup() {
   Serial.printf("Memory zeroed (1/2)\n");
   memset(pixels, 0, pixelBufferSize);
   Serial.printf("Memory zeroed (2/2)\n");
-  /*
-  for (uint16_t ty=0; ty<ALTO_TERRENO; ty++) {
-    uint8_t* _d = terreno[ty] = (uint8_t*) malloc(terrainWidthBufferSize); 
-    if (!_d) {
-        int y = 0;
-        tft.drawString("Could not allocate memory", 0, (y++)*16, 2);  // Draw text using font 2
-        tft.drawString(String("Free heap: ") + ESP.getFreeHeap(), 0, (y++)*16, 2);
-        tft.drawString(String("Largest block: ") + heap_caps_get_largest_free_block(MALLOC_CAP_8BIT), 0, (y++)*16, 2);
-        tft.drawString(String("Filas que faltan: ") + (ALTO_TERRENO-ty), 0, (y++)*16, 2);
-        return;
-    }
-  } 
-  */
-  // Inicializacion (preparar terreno)
-  initLandVoxel();
   inicializacionOk = true;
   Serial.printf("Setup just completed...\n");
   printMemStatistics();
@@ -279,7 +199,7 @@ void loop() {
     delay(100000);  // We'll actually be stuck in the loop here, so this delay is only not to have the CPU working too much...
     return;
   }
-  // Dibujar en buffer 
+  // Dibujar en buffer indexado 
   dibujaEnBuffer();
   // Volcar buffer indexado a display rgb
   vuelcaBufferIndexadoADisplayRGB();
