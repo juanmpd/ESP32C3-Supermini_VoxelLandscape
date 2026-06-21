@@ -13,14 +13,22 @@ Finally, added ideas from SEBASTIAN MACKE's https://github.com/s-macke/VoxelSpac
 
 #include <Arduino.h>
 #include <LGFX.hpp>       // Hardware-specific library
-
-LGFX tft;
-
 #define _USE_MATH_DEFINES
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+
+// Color palette for the terrain indexed colors
+#include "color_palette.h"
+// Terrain heights and colors (indexed)
+#define TERRAIN_WIDTH 1024
+#define TERRAIN_HEIGHT 1024
+extern const uint8_t terrainHeights[] __attribute__((aligned(4)));
+extern const uint8_t terrainColors[] __attribute__((aligned(4)));
+
+
+LGFX tft;
 
 
 void printMemStatistics() {
@@ -28,44 +36,23 @@ void printMemStatistics() {
   Serial.printf("Max Contiguous Heap: %lu bytes\n", (unsigned long)ESP.getMaxAllocHeap());
 }
 
-// RGB565
-static const uint16_t infoPaleta [] = {
-  0,50712,21,117,2230,2294,2358,4471,4535,6648,6712,8825,8889,10970,11034,13147,13211,15324,15388,17501,17501,17565,19678,19742,21855,
-  21919,11232,11232,11232,11264,13312,13313,13345,13345,15393,15393,15425,15426,15458,17506,17506,17538,17538,17539,19619,19651,19652,
-  21732,21764,21765,23845,23877,23878,25958,25990,25991,26023,28103,28104,28136,30185,30217,30249,32298,32330,32362,34411,34443,34475,
-  36524,36556,36588,38637,38669,38701,40749,40749,42797,44845,44845,46893,46893,48941,48941,50989,53037,53037,55085,55085,57133,59181,
-  59181,61229,61229,61228,61228,61195,61163,61130,61097,61033,61000,61000,60967,60935,60902,60870,60837,60805,60805,60773,60740,58660,
-  58628,58595,58563,56482,56418,56354,56289,33808,65535,65535,65535,65535,50712,65535,65535
-};
-
-// DIMENSIONES DE LA VENTANA. No podemos aprovechar el TFT al 100% porque el ESP32C3 tiene una
-// RAM limitada y necesitamos más de la que nos da
-// FIXME SEGURAMENTE LUEGO PODREMOS
-#define ANCHO_TFT 320
-#define ALTO_TFT 240
-#define ANCHO_VENTANA 312
-#define ALTO_VENTANA 236
-
-// PALETA DE COLORES
-const uint8_t NUMERO_COLORES = sizeof(infoPaleta) / sizeof(infoPaleta[0]);
-
-// MAPA DEL TERRENO
-#define ANCHO_TERRENO 1024
-#define ALTO_TERRENO 1024
-extern const uint8_t terreno[] __attribute__((aligned(4)));
+#define DISPLAY_WIDTH 320
+#define DISPLAY_HEIGHT 240
+#define WINDOW_WIDTH 312
+#define WINDOW_HEIGHT 236
 
 // Buffer donde dibujamos
-uint8_t *pixels = NULL; // [ANCHO_VENTANA * ALTO_VENTANA];
+uint8_t *pixels = NULL; // [WINDOW_WIDTH * WINDOW_HEIGHT];
 
-#define rgbBufferSize (ANCHO_VENTANA * ALTO_VENTANA * sizeof(uint16_t))
-#define pixelBufferSize (ANCHO_VENTANA * ALTO_VENTANA * sizeof(uint8_t))
-#define terrainWidthBufferSize (ANCHO_TERRENO * sizeof(uint8_t))
+#define rgbBufferSize (WINDOW_WIDTH * WINDOW_HEIGHT * sizeof(uint16_t))
+#define pixelBufferSize (WINDOW_WIDTH * WINDOW_HEIGHT * sizeof(uint8_t))
+#define terrainWidthBufferSize (TERRAIN_WIDTH * sizeof(uint8_t))
 
 // Para ayudar en el dibujado, mientras vamos mirando de lejos a cerca
-uint8_t lineaScan[ANCHO_VENTANA]; 
+uint8_t lineaScan[WINDOW_WIDTH]; 
 
 // DISPLAY
-static uint16_t *rgbBuffer = NULL; // [ANCHO_VENTANA * ALTO_VENTANA];
+static uint16_t *rgbBuffer = NULL; // [WINDOW_WIDTH * WINDOW_HEIGHT];
 
 const double DOS_PI = 2.0*PI;
 const double PASO_GIRO = DOS_PI / 36.0;  // Incremento de angulo al girar por teclado
@@ -74,14 +61,13 @@ const uint8_t PASO_AVANCE = 4;           // Incremento de coordenada al avanzar/
 // Posicion y direccion
 int x=0, y=0;
 double direccion = 0.0;
-const int ALTURA_OBSERVADOR = 100;
 
 /**
  * Fixed Point helpers
  */
 
 typedef int32_t fixedPointNumber;
-#define FIXED_POINT_DECIMAL_DIGITS 8
+#define FIXED_POINT_DECIMAL_DIGITS 12
 #define FIXED_POINT_FLOAT_TO_INT_FACTOR (1 << FIXED_POINT_DECIMAL_DIGITS)
 #define FROM_FLOAT_TO_FIXED_POINT(f) ((fixedPointNumber)std::round(FIXED_POINT_FLOAT_TO_INT_FACTOR*(f)))
 #define FROM_INTEGER_TO_FIXED_POINT(i) ((i)<<FIXED_POINT_DECIMAL_DIGITS)
@@ -93,9 +79,11 @@ typedef int32_t fixedPointNumber;
 
 void dibujaEnBuffer() {
     // Constantes varias
+    const int CAMERA_HEIGHT = 100;
+    const uint32_t HEIGHT_SCALE = 30;
     const uint8_t PROFUN_SCAN = 55;
-    const int ANCHO_VENTANA_AMPLIADO = (int)std::round(ANCHO_VENTANA * 1.125);
-    const int ANCHO_PANTALLA_REDUCIDO = (int)std::round(ANCHO_VENTANA * 0.9375);
+    const int ANCHO_VENTANA_AMPLIADO = (int)std::round(WINDOW_WIDTH * 1.125);
+    const int ANCHO_PANTALLA_REDUCIDO = (int)std::round(WINDOW_WIDTH * 0.9375);
 
     // Variables que usaremos
     int32_t z, zobs, iy1, iyterreno, ixterreno, xpant, ypant, s, i, j, aux, aux2;
@@ -105,30 +93,29 @@ void dibujaEnBuffer() {
     fixedPointNumber fpCsf = FROM_FLOAT_TO_FIXED_POINT(std::cos(direccion));
     fixedPointNumber fpSnf = FROM_FLOAT_TO_FIXED_POINT(std::sin(direccion));
     // Reset de la linea de scan, y del buffer de 
-    for (aux=ANCHO_VENTANA-1; aux>=0; aux--) lineaScan[aux]=ALTO_VENTANA-1;
-    for (aux=ANCHO_VENTANA*ALTO_VENTANA-1; aux>=0; aux--) pixels[aux]=(uint8_t)0;
+    for (aux=WINDOW_WIDTH-1; aux>=0; aux--) lineaScan[aux]=WINDOW_HEIGHT-1;
+    for (aux=WINDOW_WIDTH*WINDOW_HEIGHT-1; aux>=0; aux--) pixels[aux]=(uint8_t)0;
     // Calculos
-    zobs = ALTURA_OBSERVADOR + terreno[yterreno*ANCHO_TERRENO+xterreno];
+    zobs = CAMERA_HEIGHT + terrainHeights[yterreno*TERRAIN_WIDTH+xterreno];
     for (aux=0; aux<=PROFUN_SCAN; aux++){
         iy1=1+2*(aux); s=4 + ANCHO_PANTALLA_REDUCIDO/iy1;
         for (aux2=-aux; aux2<=aux; aux2++){
             ixterreno=xterreno + FROM_FIXED_POINT_TO_INTEGER(aux2*fpCsf+aux*fpSnf);
             iyterreno=yterreno + FROM_FIXED_POINT_TO_INTEGER(aux*fpCsf-aux2*fpSnf);
-            if (ixterreno<0) ixterreno+=ANCHO_TERRENO;
-            else if (ixterreno>=ANCHO_TERRENO) ixterreno-=ANCHO_TERRENO;
-            if (iyterreno<0) iyterreno+=ALTO_TERRENO;
-            else if (iyterreno>=ALTO_TERRENO) iyterreno-=ALTO_TERRENO;
-            xpant=(ANCHO_VENTANA>>1)+ ANCHO_VENTANA_AMPLIADO*aux2/iy1;
-            if ((xpant>=0) & (xpant+s<ANCHO_VENTANA)) {
-                mpc=terreno[iyterreno*ANCHO_TERRENO+ixterreno];
-                z=mpc;
-                // Next line was to allow for same sea level with different degrees of blue. Now we do not want this
-                // if (z<47) z=46; // FIXME no bajar del nivel del mar igual que VoxelSpace
-                ypant=(ALTO_VENTANA>>1)+(zobs-z)*30 / iy1;
-                if ((ypant<ALTO_VENTANA) & (ypant>=0)) {
+            if (ixterreno<0) ixterreno+=TERRAIN_WIDTH;
+            else if (ixterreno>=TERRAIN_WIDTH) ixterreno-=TERRAIN_WIDTH;
+            if (iyterreno<0) iyterreno+=TERRAIN_HEIGHT;
+            else if (iyterreno>=TERRAIN_HEIGHT) iyterreno-=TERRAIN_HEIGHT;
+            xpant=(WINDOW_WIDTH>>1)+ ANCHO_VENTANA_AMPLIADO*aux2/iy1;
+            if ((xpant>=0) & (xpant+s<WINDOW_WIDTH)) {
+                int32_t offset = iyterreno*TERRAIN_WIDTH+ixterreno;
+                z=terrainHeights[offset];
+                mpc=terrainColors[offset];
+                ypant=(WINDOW_HEIGHT>>1)+(zobs-z)*HEIGHT_SCALE / iy1;
+                if ((ypant<WINDOW_HEIGHT) & (ypant>=0)) {
                     for (j=xpant; j<=xpant+s; j++) {
                         for (i=ypant; i<lineaScan[j]; i++) {
-                            pixels[ANCHO_VENTANA*i+j]=mpc;
+                            pixels[WINDOW_WIDTH*i+j]=mpc;
                         }
                         if (ypant<lineaScan[j]) {
                             lineaScan[j]=ypant;
@@ -143,24 +130,38 @@ void dibujaEnBuffer() {
 void moverse() {
     static const int pasos = PASO_AVANCE;
     y = y + (int)std::round((pasos * std::cos(direccion)));
-    if (y>=ALTO_TERRENO) y-=ALTO_TERRENO;
-    else if (y<0) y+=ALTO_TERRENO;
+    if (y>=TERRAIN_HEIGHT) y-=TERRAIN_HEIGHT;
+    else if (y<0) y+=TERRAIN_HEIGHT;
     x = x + (int)std::round((pasos * std::sin(direccion)));
-    if (x>=ANCHO_TERRENO) x-=ANCHO_TERRENO;
-    else if (x<0) x+=ANCHO_TERRENO;
+    if (x>=TERRAIN_WIDTH) x-=TERRAIN_WIDTH;
+    else if (x<0) x+=TERRAIN_WIDTH;
     direccion = direccion + (DOS_PI / 360);
     if (direccion > DOS_PI) direccion -= DOS_PI;
 }
 
-void vuelcaBufferIndexadoADisplayRGB() {
-    // Pasar de indexado a rgb
+uint16_t skyBackgroundColor(int y) {
+    // Sky gradient (dark to light blue)
+    float t = static_cast<float>(y) / WINDOW_HEIGHT;
+    uint8_t r = static_cast<uint8_t>(9 + 12 * t);
+    uint8_t g = static_cast<uint8_t>(24 + 39 * t);
+    uint8_t b = static_cast<uint8_t>(19 + 12 * t);
+    uint16_t color = (r << 11) | (g << 5) | b;
+    return color;
+}
+
+void dumpBufferToDisplay() {
+    // Convert indexed colors into RGB565
     uint16_t *pRGBBuffer = rgbBuffer;
     uint8_t *pPixels = pixels;
-    for (uint32_t i=ANCHO_VENTANA*ALTO_VENTANA; i>0; i--) {
-        *pRGBBuffer++ = infoPaleta[*pPixels++];
+    for (uint32_t y=WINDOW_HEIGHT; y>0; y--) {
+        uint16_t skyColor = skyBackgroundColor(WINDOW_HEIGHT-y);
+        for (uint32_t x=WINDOW_WIDTH; x>0; x--) {
+            uint8_t colorIndex = *pPixels++;
+            *pRGBBuffer++ = (colorIndex!=0) ? color_palette[colorIndex] : skyColor;
+        }
     }
-    // Vuelca el buffer RGB al display
-    tft.pushImageDMA((ANCHO_TFT-ANCHO_VENTANA)/2, (ALTO_TFT-ALTO_VENTANA)/2, ANCHO_VENTANA, ALTO_VENTANA, rgbBuffer);
+    // Dump RGB buffer to display
+    tft.pushImageDMA((DISPLAY_WIDTH-WINDOW_WIDTH)/2, (DISPLAY_HEIGHT-WINDOW_HEIGHT)/2, WINDOW_WIDTH, WINDOW_HEIGHT, rgbBuffer);
 }
 
 bool inicializacionOk = false;
@@ -215,7 +216,7 @@ void loop() {
   // Dibujar en buffer indexado 
   dibujaEnBuffer();
   // Volcar buffer indexado a display rgb
-  vuelcaBufferIndexadoADisplayRGB();
+  dumpBufferToDisplay();
   // Moverse
   moverse();
 }
