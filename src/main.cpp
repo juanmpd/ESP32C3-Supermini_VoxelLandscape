@@ -1,12 +1,14 @@
 /*
-Basado originalmente en Landscape.pas que venía con SWAG de la época de MSDOS
-(SWAG era una colección muy extensa de códigos fuente, trucos y ejemplos en Pascal)
+Originally based on Landscape.pas which came with MSDOS era SWAG Pascal library.
+(SWAG was an extensive collection of source code, tricks, demos and examples in Pascal programming language)
   Category: SWAG Title: GRAPHICS ROUTINES
   Original name: 0119.PAS
   Description: Landscape
   Author: MARCIN BORKOWSKI
   Date: 08-24-94  13:50
-Después pasado a applet Java y ahora adaptado a C++ para el ESP32C3
+Then I converted it into a Java applet, and now converted into C++ for the ESP32-C3
+
+Finally, added ideas from SEBASTIAN MACKE's https://github.com/s-macke/VoxelSpace/blob/master/VoxelSpace.html
 */
 
 #include <Arduino.h>
@@ -74,9 +76,20 @@ int x=0, y=0;
 double direccion = 0.0;
 const int ALTURA_OBSERVADOR = 100;
 
+/**
+ * Fixed Point helpers
+ */
 
-#define OPTIMIZ_ANG_LOG2 8
-#define OPTIMIZ_ANG (1 << OPTIMIZ_ANG_LOG2)
+typedef int32_t fixedPointNumber;
+#define FIXED_POINT_DECIMAL_DIGITS 8
+#define FIXED_POINT_FLOAT_TO_INT_FACTOR (1 << FIXED_POINT_DECIMAL_DIGITS)
+#define FROM_FLOAT_TO_FIXED_POINT(f) ((fixedPointNumber)std::round(FIXED_POINT_FLOAT_TO_INT_FACTOR*(f)))
+#define FROM_INTEGER_TO_FIXED_POINT(i) ((i)<<FIXED_POINT_DECIMAL_DIGITS)
+#define FROM_UINT8_TO_FIXED_POINT(ui) (static_cast<fixedPointNumber>(((uint32_t)(ui))<<FIXED_POINT_DECIMAL_DIGITS))
+#define FROM_FIXED_POINT_TO_INTEGER(fp) ((fp)>>FIXED_POINT_DECIMAL_DIGITS)
+#define FROM_FIXED_POINT_TO_FLOAT(fp) ((fp)/((float)FIXED_POINT_FLOAT_TO_INT_FACTOR))
+#define FIXED_POINT_MULTIPLICATION(fp1, fp2) (static_cast<fixedPointNumber>(((static_cast<int64_t>(fp1))*(fp2))>>FIXED_POINT_DECIMAL_DIGITS))
+#define FIXED_POINT_DIVISION(fp1, fp2) (static_cast<fixedPointNumber>(((static_cast<int64_t>(fp1))<<FIXED_POINT_DECIMAL_DIGITS)/(fp2)))
 
 void dibujaEnBuffer() {
     // Constantes varias
@@ -85,12 +98,12 @@ void dibujaEnBuffer() {
     const int ANCHO_PANTALLA_REDUCIDO = (int)std::round(ANCHO_VENTANA * 0.9375);
 
     // Variables que usaremos
-    int32_t z, zobs, iy1, iyterreno, ixterreno, xpant, ypant, s, csf, snf, i, j, aux, aux2;
+    int32_t z, zobs, iy1, iyterreno, ixterreno, xpant, ypant, s, i, j, aux, aux2;
     int32_t xterreno = x, yterreno = y;
     uint8_t mpc;
     // Cosenos y senos correspondientes a DIRECCION
-    csf = (int32_t)std::round(OPTIMIZ_ANG*std::cos(direccion));
-    snf = (int32_t)std::round(OPTIMIZ_ANG*std::sin(direccion));    
+    fixedPointNumber fpCsf = FROM_FLOAT_TO_FIXED_POINT(std::cos(direccion));
+    fixedPointNumber fpSnf = FROM_FLOAT_TO_FIXED_POINT(std::sin(direccion));
     // Reset de la linea de scan, y del buffer de 
     for (aux=ANCHO_VENTANA-1; aux>=0; aux--) lineaScan[aux]=ALTO_VENTANA-1;
     for (aux=ANCHO_VENTANA*ALTO_VENTANA-1; aux>=0; aux--) pixels[aux]=(uint8_t)0;
@@ -99,8 +112,8 @@ void dibujaEnBuffer() {
     for (aux=0; aux<=PROFUN_SCAN; aux++){
         iy1=1+2*(aux); s=4 + ANCHO_PANTALLA_REDUCIDO/iy1;
         for (aux2=-aux; aux2<=aux; aux2++){
-            ixterreno=xterreno + ((aux2*csf+aux*snf) >> OPTIMIZ_ANG_LOG2);
-            iyterreno=yterreno + ((aux*csf-aux2*snf) >> OPTIMIZ_ANG_LOG2);
+            ixterreno=xterreno + FROM_FIXED_POINT_TO_INTEGER(aux2*fpCsf+aux*fpSnf);
+            iyterreno=yterreno + FROM_FIXED_POINT_TO_INTEGER(aux*fpCsf-aux2*fpSnf);
             if (ixterreno<0) ixterreno+=ANCHO_TERRENO;
             else if (ixterreno>=ANCHO_TERRENO) ixterreno-=ANCHO_TERRENO;
             if (iyterreno<0) iyterreno+=ALTO_TERRENO;
@@ -110,7 +123,7 @@ void dibujaEnBuffer() {
                 mpc=terreno[iyterreno*ANCHO_TERRENO+ixterreno];
                 z=mpc;
                 // Next line was to allow for same sea level with different degrees of blue. Now we do not want this
-                // if (z<47) z=46;
+                // if (z<47) z=46; // FIXME no bajar del nivel del mar igual que VoxelSpace
                 ypant=(ALTO_VENTANA>>1)+(zobs-z)*30 / iy1;
                 if ((ypant<ALTO_VENTANA) & (ypant>=0)) {
                     for (j=xpant; j<=xpant+s; j++) {
